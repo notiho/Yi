@@ -69,3 +69,14 @@ with open("corpus_statistics.csv", "w") as outfile:
 				str(len(text)),
 				c,
 				str(n))) + "\n")
+
+with open("texts_cleaned.csv", "w") as outfile:
+	outfile.write("filename,kr_first,kr_second,kr_third,text\n")
+	for filename, text in tqdm.tqdm(rsts):
+		counts = Counter(text)
+		kr_number = filename.split("/")[-1].split("_")[0]
+		outfile.write(",".join((filename,
+			kr_metadata[kr_number[:3]],
+			kr_metadata[kr_number[:4]],
+			kr_metadata[kr_number],
+			text)) + "\n")

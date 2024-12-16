@@ -10,6 +10,7 @@ cluster_assignments <- read_csv("cluster_assignments.csv")
 cluster_assignments <- cluster_assignments %>% mutate(index = index + 1)
 samples <- inner_join(samples, cluster_assignments)
 corpus_statistics <- read.csv("corpus_statistics.csv")
+dynasty_times <- read_csv("dynasty_times.csv")
 
 np <- import("numpy")
 umap2 <- np$load("embeddings_dimensionality_reduced2.npy")
@@ -31,13 +32,32 @@ corpus_statistics %>%
 
 round(100 * 913363 / 113779256, 2)
 
+# Corpus by genre & time
 corpus_statistics %>%
   group_by(filename) %>%
   slice_head(n = 1) %>%
   group_by(kr_second) %>%
   summarise(n_chars = sum(total_length))
 
-yis_per_genre <- corpus_statistics %>%
+corpus_statistics %>%
+  group_by(filename) %>%
+  slice_head(n = 1) %>%
+  mutate(dynasty = str_split_i(kr_third, "-", 2)) %>%
+  left_join(rownames_to_column(dynasty_times, var = "index"),
+            by = join_by("dynasty")) %>%
+  mutate(index = as.numeric(index)) %>%
+  group_by(dynasty_normalized) %>%
+  summarise(num_chars = round(sum(total_length) / 1000000, 1),
+            start = first(start),
+            end = first(end),
+            index = first(index)) %>%
+  arrange(index) %>%
+  mutate(name = paste0(
+    dynasty_normalized, " (",
+    start, "-", end, ")")) %>%
+  select(name, num_chars)
+
+# yis_per_genre <- corpus_statistics %>%
   filter(character == "一") %>%
   group_by(kr_second) %>%
   summarise(total_length = sum(total_length), yi_count = sum(count)) %>%
@@ -62,8 +82,9 @@ sd(yis_per_title$relative)
 quantile(umap2[, 1], c(0.001, 0.999))
 quantile(umap2[, 2], c(0.001, 0.999))
 
-umap2_highlight <- function(highlight_indices, highlight_red_indices) {
-  ggplot() +
+umap2_highlight <- function(highlight_indices, highlight_red_indices,
+                            highlight_green_indices) {
+  rst <- ggplot() +
     geom_point(aes(x = x, y = y), data = umap2, shape = ".", col = "grey") +
     geom_point(aes(x = x, y = y), data = umap2[highlight_indices, ], alpha = 0.1) +
     geom_point(aes(x = x, y = y), data = umap2[highlight_red_indices, , drop = F], alpha = 0.3, color = "red") +
@@ -74,17 +95,47 @@ umap2_highlight <- function(highlight_indices, highlight_red_indices) {
     xlab("") + ylab("") +
     coord_equal() +
     theme(legend.position = "none")
+  
+  if (!missing(highlight_green_indices)) {
+    rst <- rst + geom_point(aes(x = x, y = y), data = umap2[highlight_green_indices, , drop = F], alpha = 0.3, color = "green")
+  }
+  rst
 }
 
-zhi_yi_qie_bing_tsne <- umap2_highlight(samples %>%
+zhi_yi_qie_bing_umap <- umap2_highlight(samples %>%
                                           filter(startsWith(context_right, "切") & !(endsWith(context_left, "治") & startsWith(context_right, "切病"))) %>% pull(index),
                                         samples %>%
                                           filter(startsWith(context_right, "切病") & endsWith(context_left, "治")) %>% pull(index)) +
   scale_x_continuous(limits = c(-14, 15.5)) +
   scale_y_continuous(limits = c(-13, 15))
-ggsave("zhi_yi_qie_bing_umap2.png", plot = zhi_yi_qie_bing_tsne, width=10, height=10)
+ggsave("zhi_yi_qie_bing_umap2.png", plot = zhi_yi_qie_bing_umap, width=10, height=10)
 
 6571 / nrow(umap2)
+
+yi_ren_umap <- umap2_highlight(samples %>%
+                  filter(grepl("^人", context_right)) %>% pull(index),
+                samples %>%
+                  filter(cluster_index == 28) %>% pull(index),
+                samples %>% 
+                  filter(cluster_index == 44) %>% pull(index)) +
+  scale_x_continuous(limits = c(-14, 15.5)) +
+  scale_y_continuous(limits = c(-13, 15))
+ggsave("yi_ren_umap2.png", plot = yi_ren_umap, width=10, height=10)
+
+
+yi_x_ren_umap <- umap2_highlight(samples %>%
+                  filter(grepl("^子", context_right)) %>% pull(index),
+                samples %>%
+                  filter(cluster_index == 44) %>% pull(index)) +
+  scale_x_continuous(limits = c(-14, 15.5)) +
+  scale_y_continuous(limits = c(-13, 15))
+ggsave("yi_x_ren_umap2.png", plot = yi_x_ren_umap, width=10, height=10)
+
+
+umap2_highlight(samples %>% filter(grepl("^[日夜朝夕旦]", context_right)) %>% pull(index),
+                samples %>% filter(cluster_index %in% c(321, 492, 869)) %>% pull(index)) +
+  scale_x_continuous(limits = c(-14, 15.5)) +
+  scale_y_continuous(limits = c(-13, 15))
 
 kwic <- function(indices) {
   samples[indices, ] %>%
@@ -137,6 +188,23 @@ samples %>%
   summarise(highest_percentage = max(percentage)) %>%
   count(highest_percentage >= 0.99) %>%
   mutate(percentage = n / sum(n))
+
+# sample 50 clusters over the range of cluster sizes
+set.seed(1234)
+data.frame(n = cluster_counts) %>%
+  rownames_to_column(var = "index") %>%
+  mutate(size1 = n >= 1000,
+         size2 = n < 1000 & n >= 100,
+         size3 = n < 100 & n >= 50,
+         size4 = n < 50) %>%
+  group_by(size1, size2, size3, size4) %>%
+  sample_n(25) %>%
+  ungroup() %>%
+  select(index) %>%
+  mutate(index = as.integer(index) - 1) %>%
+  arrange(index) %>%
+  write_csv("clusters_for_quality_check.csv")
+
 
 # 一x一y
 samples %>% 
@@ -276,3 +344,23 @@ samples %>%
   count(kr_second) %>%
   mutate(prop = n / sum(n)) %>%
   arrange(desc(n))
+
+samples %>% 
+  filter(cluster_index != -1 & probability == 1) %>%
+  group_by(cluster_index) %>%
+  summarise(target_num = sum(time_period == "清" & kr_second == "天文算法類"),
+            size = n()) %>%
+  filter(target_num / size >= 0.99) %>%
+  arrange(desc(target_num)) %>%
+  print(n = 100)
+
+samples %>%
+  filter(endsWith(context_left, "每") & startsWith(context_right, "邊"))
+
+samples %>%
+  filter(cluster_index == 137) %>%
+  count(substr(context_right, 1, 1))
+
+kwic(samples %>%
+       filter(cluster_index == 137 & kr_third != "御製數理精薀-清-聖祖玄燁") %>% pull(index))
+
