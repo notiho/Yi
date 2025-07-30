@@ -3,6 +3,8 @@ import numpy as np
 from transformers import AutoTokenizer, BertForMaskedLM
 import torch
 
+context_length_limit = 20
+
 tokenizer = AutoTokenizer.from_pretrained("Jihuai/bert-ancient-chinese")
 model = BertForMaskedLM.from_pretrained("Jihuai/bert-ancient-chinese")
 
@@ -27,16 +29,16 @@ targets = [t.strip().split(",") for t in targets]
 embeddings = []
 
 for index,filename,index_in_file,kr_first,kr_second,kr_third,context_left,context_right in tqdm.tqdm(targets):
-	inputs = tokenizer(["".join((context_left, "一", context_right))],
+	inputs = tokenizer(["".join((context_left[-context_length_limit:], "一", context_right[:context_length_limit]))],
 		return_tensors="pt", padding=True).to(device)
 	
 	assert(len(context_left) + len(context_right) + 1 <= max_position_embeddings - 2)
 	
 	with torch.no_grad():
 		hidden = model(**inputs, output_hidden_states = True).hidden_states
-		embeddings.append(hidden[9][0, 1 + len(context_left)].detach().cpu().numpy())
+		embeddings.append(hidden[9][0, 1 + len(context_left[-context_length_limit:])].detach().cpu().numpy())
 
 input("Press enter to start writing to file.")
 
 embeddings = np.array(embeddings)
-np.save("embeddings.npy", embeddings)
+np.save(f"embeddings_context_length_limit_{context_length_limit}.npy", embeddings)
