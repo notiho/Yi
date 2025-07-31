@@ -1,9 +1,12 @@
+import sys
 import numpy as np
 import tqdm
 from cuml.cluster import hdbscan
 from collections import Counter
 
-embeddings = np.load("embeddings_dimensionality_reduced5.npy")
+embeddings_filename = Path(sys.argv[1])
+
+embeddings = np.load(f"{embeddings_filename.stem}_dimensionality_reduced5.npy")
 
 clusterer = hdbscan.HDBSCAN(
 	min_cluster_size = 5,
@@ -28,7 +31,7 @@ cluster_counts_sorted = [x for x, _ in cluster_counts_sorted]
 
 input("Press enter to start writing to file.")
 
-with open("cluster_assignments.csv", "w") as assignments_outfile:
+with open(f"{embeddings_filename.stem}_cluster_assignments.csv", "w") as assignments_outfile:
 	assignments_outfile.write("index,cluster_index,probability,cluster_index_raw\n")
 	for i, (label, probability) in enumerate(zip(hdbscan_labels, hdbscan_probabilities)):
 		assignments_outfile.write(f"{i},{cluster_counts_sorted.index(label) if label != -1 else -1},{probability},{label}\n")
