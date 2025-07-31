@@ -1,13 +1,16 @@
+import sys
 import json
 import numpy as np
+from pathlib import Path
 from collections import Counter
 import tqdm
 
 data = []
+embeddings_filename = Path(sys.argv[1])
 
 cluster_counts = Counter()
 
-with open("cluster_assignments.csv") as infile:
+with open(f"{embeddings_filename.stem}_cluster_assignments.csv") as infile:
 	lines = infile.readlines()
 	for l in lines[1:]:
 		parts = l.split(",")
@@ -31,5 +34,5 @@ data = [i for i in data if i[0] != -1]
 with open("viewer.html") as infile:
 	text = infile.read().replace("!!DATA!!", json.dumps(data))
 
-with open("viewer_rendered.html", "w") as outfile:
+with open(f"{embeddings_filename.stem}_viewer_rendered.html", "w") as outfile:
 	outfile.write(text)
