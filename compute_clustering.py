@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import tqdm
+from pathlib import Path
 from cuml.cluster import hdbscan
 from collections import Counter
 
