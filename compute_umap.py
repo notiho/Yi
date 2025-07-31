@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 from pathlib import Path
-from cuml.manifold import UMAP
+from umap import UMAP
 
 embeddings_filename = Path(sys.argv[1])
 
