@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 from pathlib import Path
-from umap
+import umap
 
 embeddings_filename = Path(sys.argv[1])
 n_components = int(sys.argv[2])
