@@ -7,7 +7,7 @@ from collections import Counter
 
 embeddings_filename = Path(sys.argv[1])
 
-embeddings = np.load(f"{embeddings_filename.stem}_dimensionality_reduced5.npy")
+embeddings = np.load(embeddings_filename)
 
 clusterer = hdbscan.HDBSCAN(
 	min_cluster_size = 5,
