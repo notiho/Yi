@@ -6,9 +6,15 @@ samples <- samples %>% mutate(index = index + 1) %>%
   mutate(title = str_split_i(kr_third, "-", 1),
          time_period = str_split_i(kr_third, "-", 2),
          authord = str_split_i(kr_third, "-", 3))
+
 cluster_assignments <- read_csv("cluster_assignments.csv")
 cluster_assignments <- cluster_assignments %>% mutate(index = index + 1)
-samples <- inner_join(samples, cluster_assignments)
+
+cluster_assignments_20 <- read_csv("embeddings_context_length_limit_20_cluster_assignments.csv")
+cluster_assignments_20 <- cluster_assignments_20 %>% mutate(index = index + 1)
+
+samples <- inner_join(samples, cluster_assignments, by = join_by(index))
+samples <- inner_join(samples, cluster_assignments_20, by = join_by(index), suffix = c("", "_20"))
 corpus_statistics <- read.csv("corpus_statistics.csv")
 dynasty_times <- read_csv("dynasty_times.csv")
 
@@ -57,7 +63,7 @@ corpus_statistics %>%
     start, "-", end, ")")) %>%
   select(name, num_chars)
 
-# yis_per_genre <- corpus_statistics %>%
+yis_per_genre <- corpus_statistics %>%
   filter(character == "一") %>%
   group_by(kr_second) %>%
   summarise(total_length = sum(total_length), yi_count = sum(count)) %>%
@@ -171,6 +177,7 @@ samples %>%
   count(kr_second) %>%
   mutate(percentage = n / sum(n))
 
+#clusters dominated by one genre
 samples %>% 
   filter(cluster_index != -1) %>%
   group_by(cluster_index) %>%
@@ -179,7 +186,25 @@ samples %>%
   summarise(highest_percentage = max(percentage)) %>%
   count(highest_percentage >= 0.99) %>%
   mutate(percentage = n / sum(n))
+samples %>% 
+  filter(cluster_index != -1) %>%
+  group_by(cluster_index) %>%
+  count(kr_second) %>%
+  mutate(percentage = n / sum(n)) %>%
+  summarise(highest_percentage = max(percentage)) %>%
+  count(highest_percentage >= 0.90) %>%
+  mutate(percentage = n / sum(n))
+samples %>% 
+  filter(cluster_index_20 != -1) %>%
+  group_by(cluster_index_20) %>%
+  filter(n() >= 10) %>%
+  count(kr_second) %>%
+  mutate(percentage = n / sum(n)) %>%
+  summarise(highest_percentage = max(percentage)) %>%
+  count(highest_percentage >= 0.99) %>%
+  mutate(percentage = n / sum(n))
 
+#clusters dominated by one time period
 samples %>% 
   filter(cluster_index != -1) %>%
   group_by(cluster_index) %>%
@@ -188,6 +213,49 @@ samples %>%
   summarise(highest_percentage = max(percentage)) %>%
   count(highest_percentage >= 0.99) %>%
   mutate(percentage = n / sum(n))
+
+#distribution of types immediately left and right of 一
+count_clusters_dominated_by_immediate_context <- function(df, group_col, threshold) {
+  group_col_sym <- rlang::sym(group_col)
+  
+  df %>%
+    filter(!!group_col_sym != -1) %>%
+    group_by(!!group_col_sym) %>%
+    mutate(
+      type_right = coalesce(substr(context_right, 1, 1), ""),
+      type_left  = substr(context_left, nchar(context_left), nchar(context_left))
+    ) %>%
+    summarise(
+      right_max = max(table(type_right) / n()),
+      left_max  = max(table(type_left) / n()),
+    ) %>%
+    mutate(pass_right = right_max >= threshold,
+           pass_left = left_max >= threshold) %>%
+    count(pass_left, pass_right) %>%
+    mutate(percentage = n / sum(n))
+}
+samples %>%
+  count_clusters_dominated_by_immediate_context("cluster_index", 0.99)
+samples %>%
+  count_clusters_dominated_by_immediate_context("cluster_index_20", 0.99)
+
+samples %>% 
+  filter(cluster_index != -1) %>%
+  group_by(cluster_index) %>%
+  mutate(type_right = substr(context_right, 1, 1)) %>%
+  summarise(type_frequency = n_distinct(type_right)) %>%
+  filter(type_frequency <= quantile(type_frequency, 0.95)) %>%
+  count(type_frequency) %>%
+  complete(type_frequency = 1:max(type_frequency), fill = list(n = 0)) %>%
+  ggplot(aes(type_frequency, n)) +
+  geom_bar(stat = "identity")
+
+#Clusters with medical instances
+samples %>%
+  filter(cluster_index != -1) %>%
+  group_by(cluster_index) %>%
+  summarise(num_medical = sum(kr_second == "醫家類")) %>%
+  count(num_medical >= 5)
 
 # sample 50 clusters over the range of cluster sizes
 set.seed(1234)
@@ -205,6 +273,17 @@ data.frame(n = cluster_counts) %>%
   arrange(index) %>%
   write_csv("clusters_for_quality_check.csv")
 
+
+#Multi-genre clusters with 一切
+samples %>% 
+  filter(cluster_index != -1 & probability == 1) %>%
+  filter(startsWith(context_right, "切")) %>%
+  group_by(cluster_index) %>%
+  filter(n() >= 5) %>%
+  count(kr_second) %>%
+  mutate(percentage = n / sum(n)) %>%
+  summarise(highest_percentage = max(percentage)) %>%
+  arrange(highest_percentage)
 
 # 一x一y
 samples %>% 
